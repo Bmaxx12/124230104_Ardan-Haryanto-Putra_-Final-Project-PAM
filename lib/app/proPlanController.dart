@@ -1,0 +1,231 @@
+import 'package:flutter/material.dart';
+import 'package:finalproject/service/apiService.dart';
+
+class ProPlanController {
+  // State variables
+  int selectedPlanIndex = 1; // Default: Pro Plan
+  String selectedCurrency = 'USD';
+  
+  // Services
+  final CurrencyService currencyService = CurrencyService();
+  
+  // Context untuk SnackBar
+  BuildContext? context;
+  
+  // Callback untuk update UI
+  Function()? onStateChanged;
+
+  // Animation Controller (akan dihandle di UI)
+  
+  // Available Currencies
+  final List<Map<String, String>> availableCurrencies = [
+    {'code': 'USD', 'name': 'US Dollar', 'symbol': '\$'},
+    {'code': 'EUR', 'name': 'Euro', 'symbol': '€'},
+    {'code': 'GBP', 'name': 'British Pound', 'symbol': '£'},
+    {'code': 'JPY', 'name': 'Japanese Yen', 'symbol': '¥'},
+    {'code': 'IDR', 'name': 'Indonesian Rupiah', 'symbol': 'Rp'},
+    {'code': 'SGD', 'name': 'Singapore Dollar', 'symbol': 'S\$'},
+    {'code': 'MYR', 'name': 'Malaysian Ringgit', 'symbol': 'RM'},
+    {'code': 'AUD', 'name': 'Australian Dollar', 'symbol': 'A\$'},
+    {'code': 'CNY', 'name': 'Chinese Yuan', 'symbol': '¥'},
+    {'code': 'THB', 'name': 'Thai Baht', 'symbol': '฿'},
+  ];
+
+  // Plans Data
+  final List<Map<String, dynamic>> plansUSD = [
+    {
+      'name': 'Basic',
+      'price': 0.0,
+      'priceText': 'Gratis',
+      'duration': 'Selamanya',
+      'color': Colors.blue,
+      'features': [
+        'Prakiraan cuaca 3 hari',
+        'Update setiap 3 jam',
+        'Lokasi terbatas (1)',
+        'Iklan ditampilkan',
+      ],
+      'icon': Icons.wb_sunny_outlined,
+    },
+    {
+      'name': 'Pro',
+      'price': 4.99,
+      'priceText': '\$4.99',
+      'duration': '/bulan',
+      'color': Colors.orangeAccent,
+      'features': [
+        'Prakiraan cuaca 14 hari',
+        'Update realtime setiap jam',
+        'Unlimited lokasi',
+        'Tanpa iklan',
+        'Lihat kurs mata uang pilihan',
+        'Notifikasi cuaca ekstrem',
+        'Widget premium',
+      ],
+      'icon': Icons.wb_sunny,
+      'badge': 'POPULER',
+    },
+    {
+      'name': 'Premium',
+      'price': 9.99,
+      'priceText': '\$9.99',
+      'duration': '/bulan',
+      'color': Colors.purple,
+      'features': [
+        'Semua fitur Pro',
+        'Prakiraan cuaca 30 hari',
+        'Radar cuaca interaktif',
+        'Analisis cuaca AI',
+        'API access',
+        'Priority support',
+        'Data historis',
+      ],
+      'icon': Icons.stars,
+    },
+  ];
+
+  ProPlanController({this.context});
+
+  void setContext(BuildContext ctx) {
+    context = ctx;
+  }
+
+  void notifyListeners() {
+    if (onStateChanged != null) {
+      onStateChanged!();
+    }
+  }
+
+  // ========== PLAN SELECTION ==========
+
+  void selectPlan(int index) {
+    selectedPlanIndex = index;
+    notifyListeners();
+  }
+
+  Map<String, dynamic> get selectedPlan => plansUSD[selectedPlanIndex];
+
+  // ========== CURRENCY CONVERSION ==========
+
+  Future<String> getConvertedPrice(double usdPrice, String targetCurrency) async {
+    if (targetCurrency == 'USD') {
+      return '\$${usdPrice.toStringAsFixed(2)}';
+    }
+
+    try {
+      final result = await currencyService.convertCurrency('USD', targetCurrency, usdPrice);
+      
+      // Debug: Print response untuk melihat struktur data
+      print('🔍 API Response: $result');
+      
+      // Perbaikan: Cek struktur data yang sebenarnya dari API
+      final convertedAmount = result['converted_amount'] ?? 
+                             result['result'] ?? 
+                             result['amount'] ?? 
+                             usdPrice;
+      
+      // Pastikan convertedAmount adalah double
+      double finalAmount;
+      if (convertedAmount is int) {
+        finalAmount = convertedAmount.toDouble();
+      } else if (convertedAmount is double) {
+        finalAmount = convertedAmount;
+      } else if (convertedAmount is String) {
+        finalAmount = double.tryParse(convertedAmount) ?? usdPrice;
+      } else {
+        finalAmount = usdPrice;
+      }
+      
+      final symbol = getCurrencySymbol(targetCurrency);
+      
+      // Format berdasarkan currency
+      if (targetCurrency == 'IDR' || targetCurrency == 'JPY') {
+        // Untuk IDR dan JPY, tanpa desimal dan dengan separator
+        String formatted = finalAmount.toStringAsFixed(0);
+        return symbol + addThousandSeparator(formatted);
+      } else {
+        // Untuk currency lain, dengan 2 desimal
+        return symbol + finalAmount.toStringAsFixed(2);
+      }
+    } catch (e) {
+      print('❌ Error converting currency: $e');
+      // Fallback ke USD jika konversi gagal
+      return '\$${usdPrice.toStringAsFixed(2)}';
+    }
+  }
+
+  String addThousandSeparator(String number) {
+    final parts = number.split('.');
+    final integerPart = parts[0];
+    final buffer = StringBuffer();
+    
+    for (int i = 0; i < integerPart.length; i++) {
+      if (i > 0 && (integerPart.length - i) % 3 == 0) {
+        buffer.write(',');
+      }
+      buffer.write(integerPart[i]);
+    }
+    
+    if (parts.length > 1) {
+      buffer.write('.');
+      buffer.write(parts[1]);
+    }
+    
+    return buffer.toString();
+  }
+
+  String getCurrencySymbol(String currencyCode) {
+    return availableCurrencies.firstWhere(
+      (c) => c['code'] == currencyCode,
+      orElse: () => {'symbol': '\$'},
+    )['symbol']!;
+  }
+
+  // ========== SUBSCRIPTION ACTIONS ==========
+
+  void handleSubscription() {
+    if (selectedPlanIndex == 0) {
+      // Free plan
+      if (context != null && context!.mounted) {
+        _showFreePlanMessage();
+      }
+    } else {
+      // Paid plan - akan ditangani oleh UI untuk show dialog
+    }
+  }
+
+  void _showFreePlanMessage() {
+    if (context == null || !context!.mounted) return;
+    
+    // Akan ditangani di UI layer
+    // Placeholder untuk logic jika diperlukan
+  }
+
+  void confirmSubscription(String convertedPrice) {
+    if (context == null || !context!.mounted) return;
+
+    final plan = selectedPlan;
+    
+    ScaffoldMessenger.of(context!).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Berlangganan ${plan['name']} berhasil!\nPembayaran: $convertedPrice${plan['duration']}',
+        ),
+        backgroundColor: plan['color'] as Color,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ========== GETTERS ==========
+
+  bool isPlanSelected(int index) => selectedPlanIndex == index;
+
+  Color getSelectedPlanColor() => selectedPlan['color'] as Color;
+
+  String getSubscribeButtonText() {
+    return selectedPlanIndex == 0 
+        ? 'Gunakan Gratis' 
+        : 'Berlangganan ${selectedPlan['name']}';
+  }
+}
