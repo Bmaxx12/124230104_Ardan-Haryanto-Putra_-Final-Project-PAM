@@ -11,39 +11,61 @@ class LoginController {
   final TextEditingController passwordController = TextEditingController();
   final DatabaseHelper dbHelper = DatabaseHelper();
   
-  bool isObscure = true;
-  bool isLoading = false;
+  // PERBAIKAN: Buat instance ValueNotifier yang proper
+  final ValueNotifier<bool> isObscureNotifier = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> rememberMeNotifier = ValueNotifier<bool>(false);
 
-  ValueNotifier<bool> get isObscureNotifier => ValueNotifier(isObscure);
-  ValueNotifier<bool> get isLoadingNotifier => ValueNotifier(isLoading);
-
-  /// 🗄️ Inisialisasi database
   Future<void> initDatabase() async {
     await dbHelper.ensureUserTableExists();
   }
 
-  /// 🔒 Fungsi untuk enkripsi password
   String encryptPassword(String password) {
     var bytes = utf8.encode(password);
     var digest = sha256.convert(bytes);
     return digest.toString();
   }
 
-  /// 💾 Simpan session
-  Future<void> saveSession(String username) async {
+  // Load saved credentials jika "Ingat Saya" aktif
+  Future<void> loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedRememberMe = prefs.getBool('rememberMe') ?? false;
+    
+    if (savedRememberMe) {
+      final savedUsername = prefs.getString('savedUsername') ?? '';
+      final savedPassword = prefs.getString('savedPassword') ?? '';
+      
+      userController.text = savedUsername;
+      passwordController.text = savedPassword;
+      rememberMeNotifier.value = savedRememberMe;
+    }
+  }
+
+  // Save session dengan opsi remember me
+  Future<void> saveSession(String username, String password) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('username', username);
     await prefs.setBool('isLoggedIn', true);
+    
+    // Simpan credentials jika "Ingat Saya" aktif
+    if (rememberMeNotifier.value) {
+      await prefs.setString('savedUsername', username);
+      await prefs.setString('savedPassword', password);
+      await prefs.setBool('rememberMe', true);
+    } else {
+      // Hapus saved credentials jika tidak dicentang
+      await prefs.remove('savedUsername');
+      await prefs.remove('savedPassword');
+      await prefs.setBool('rememberMe', false);
+    }
   }
 
-  /// 🔍 Cek session
   Future<void> checkSession(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     final username = prefs.getString('username');
     
     if (isLoggedIn && username != null) {
-      // Jika sudah login, langsung ke WeatherScreen
       if (context.mounted) {
         Navigator.pushReplacement(
           context,
@@ -53,12 +75,11 @@ class LoginController {
     }
   }
 
-  /// 🚪 Login handler dengan database
+  // Login dengan save password asli untuk remember me
   Future<void> login(BuildContext context) async {
     String username = userController.text.trim();
     String password = passwordController.text;
 
-    // Validasi input
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -69,25 +90,23 @@ class LoginController {
       return;
     }
 
-    _setLoading(true);
+    isLoadingNotifier.value = true;
 
     try {
-      // Hash password
       String hashedPassword = encryptPassword(password);
-      
-      // Cek ke database
+
       UserModel? user = await dbHelper.loginUser(username, hashedPassword);
 
-      _setLoading(false);
+      isLoadingNotifier.value = false;
 
       if (user != null) {
-        // Login berhasil
-        await saveSession(username);
+        // Simpan session dan credentials
+        await saveSession(username, password);
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Login Berhasil, Selamat Datang ${user.username}"),
+              content: Text("✅ Login Berhasil, Selamat Datang ${user.username}"),
               backgroundColor: Colors.green[700],
             ),
           );
@@ -98,23 +117,22 @@ class LoginController {
           );
         }
       } else {
-        // Login gagal
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text("Login gagal, username atau password salah"),
+              content: const Text("❌ Login gagal, username atau password salah"),
               backgroundColor: Colors.red[800],
             ),
           );
         }
       }
     } catch (e) {
-      _setLoading(false);
+      isLoadingNotifier.value = false;
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: ${e.toString()}"),
+            content: Text("❌ Error: ${e.toString()}"),
             backgroundColor: Colors.red[800],
           ),
         );
@@ -122,7 +140,6 @@ class LoginController {
     }
   }
 
-  /// 📝 Navigate to Register
   void goToRegister(BuildContext context) {
     Navigator.push(
       context,
@@ -130,23 +147,21 @@ class LoginController {
     );
   }
 
-  /// 👁️ Toggle password visibility
+  // PERBAIKAN: Toggle password visibility
   void togglePasswordVisibility() {
-    isObscure = !isObscure;
-    isObscureNotifier.value = isObscure;
+    isObscureNotifier.value = !isObscureNotifier.value;
   }
 
-  /// ⏳ Set loading state
-  void _setLoading(bool value) {
-    isLoading = value;
-    isLoadingNotifier.value = isLoading;
+  // PERBAIKAN: Toggle remember me
+  void toggleRememberMe(bool? value) {
+    rememberMeNotifier.value = value ?? false;
   }
 
-  /// 🧹 Cleanup resources
   void dispose() {
     userController.dispose();
     passwordController.dispose();
     isObscureNotifier.dispose();
     isLoadingNotifier.dispose();
+    rememberMeNotifier.dispose();
   }
 }

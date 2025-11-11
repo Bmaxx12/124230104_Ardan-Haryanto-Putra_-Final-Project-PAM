@@ -37,5 +37,4 @@ flutter:
 
   # Tambahkan bagian ini untuk mengimpor gambar dari folder assets/images
   assets:
-    - assets/images/cloudy.png
-    - assets/images/profile.jpg
+    - assets/images/

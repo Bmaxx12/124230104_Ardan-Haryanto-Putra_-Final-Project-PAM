@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _initializeController() async {
     await _controller.initDatabase();
+    await _controller.loadSavedCredentials(); // TAMBAHAN: Load saved credentials
     _controller.checkSession(context);
   }
 
@@ -33,123 +34,155 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // --- Header Text ---
-              const Center(
-                child: Text(
-                  "Welcome Back\nLogin to Continue",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                    height: 1.2,
+        child: SingleChildScrollView( // TAMBAHAN: Agar bisa scroll
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // --- Header Text ---
+                const Center(
+                  child: Text(
+                    "Welcome Back\nLogin to Continue",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                      height: 1.2,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 40),
+                const SizedBox(height: 40),
 
-              // --- Illustration Image ---
-              Image.asset(
-                "assets/images/cloudy.png",
-                height: 200,
-              ),
-              const SizedBox(height: 40),
+                // --- Illustration Image ---
+                Image.asset(
+                  "assets/images/cloudy.png",
+                  height: 180, // Dikurangi sedikit
+                ),
+                const SizedBox(height: 40),
 
-              // --- Username Field ---
-              CustomTextfield(
-                controller: _controller.userController,
-                textInputType: TextInputType.text,
-                textInputAction: TextInputAction.next,
-                hint: 'Username',
-              ),
-              const SizedBox(height: 16),
+                // --- Username Field ---
+                CustomTextfield(
+                  controller: _controller.userController,
+                  textInputType: TextInputType.text,
+                  textInputAction: TextInputAction.next,
+                  hint: 'Username',
+                ),
+                const SizedBox(height: 16),
 
-              // --- Password Field ---
-              ValueListenableBuilder<bool>(
-                valueListenable: _controller.isObscureNotifier,
-                builder: (context, isObscure, child) {
-                  return CustomTextfield(
-                    controller: _controller.passwordController,
-                    textInputType: TextInputType.visiblePassword,
-                    textInputAction: TextInputAction.done,
-                    hint: 'Password',
-                    isObscure: isObscure,
-                    hasSuffix: true,
-                    onPressed: _controller.togglePasswordVisibility,
-                  );
-                },
-              ),
-              const SizedBox(height: 30),
+                // --- Password Field ---
+                ValueListenableBuilder<bool>(
+                  valueListenable: _controller.isObscureNotifier,
+                  builder: (context, isObscure, child) {
+                    return CustomTextfield(
+                      controller: _controller.passwordController,
+                      textInputType: TextInputType.visiblePassword,
+                      textInputAction: TextInputAction.done,
+                      hint: 'Password',
+                      isObscure: isObscure,
+                      hasSuffix: true,
+                      onPressed: _controller.togglePasswordVisibility,
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
 
-              // --- Login Button ---
-              ValueListenableBuilder<bool>(
-                valueListenable: _controller.isLoadingNotifier,
-                builder: (context, isLoading, child) {
-                  return ElevatedButton(
-                    onPressed: isLoading ? null : () => _controller.login(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orangeAccent,
-                      disabledBackgroundColor: Colors.orangeAccent.withOpacity(0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text(
-                            "Log In",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: Colors.white,
-                            ),
-                          ),
-                  );
-                },
-              ),
-
-              const Spacer(),
-
-              // --- Register Link ---
-              Center(
-                child: GestureDetector(
-                  onTap: () => _controller.goToRegister(context),
-                  child: RichText(
-                    text: const TextSpan(
-                      text: "Belum punya akun? ",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white70,
-                      ),
+                // --- CHECKBOX INGAT SAYA (BARU) ---
+                ValueListenableBuilder<bool>(
+                  valueListenable: _controller.rememberMeNotifier,
+                  builder: (context, rememberMe, child) {
+                    return Row(
                       children: [
-                        TextSpan(
-                          text: "Register!",
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.orangeAccent,
-                            fontWeight: FontWeight.bold,
+                        Checkbox(
+                          value: rememberMe,
+                          onChanged: _controller.toggleRememberMe,
+                          activeColor: Colors.orangeAccent,
+                          checkColor: Colors.white,
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            _controller.toggleRememberMe(!rememberMe);
+                          },
+                          child: const Text(
+                            'Ingat Saya',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
                       ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // --- Login Button ---
+                ValueListenableBuilder<bool>(
+                  valueListenable: _controller.isLoadingNotifier,
+                  builder: (context, isLoading, child) {
+                    return ElevatedButton(
+                      onPressed: isLoading ? null : () => _controller.login(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orangeAccent,
+                        disabledBackgroundColor: Colors.orangeAccent.withOpacity(0.6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                      ),
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              "Log In",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.white,
+                              ),
+                            ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 20), // UBAH: dari Spacer() ke SizedBox
+
+                // --- Register Link ---
+                Center(
+                  child: GestureDetector(
+                    onTap: () => _controller.goToRegister(context),
+                    child: RichText(
+                      text: const TextSpan(
+                        text: "Belum punya akun? ",
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.white70,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: "Register!",
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.orangeAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

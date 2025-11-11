@@ -591,9 +591,9 @@ class _CurrencyConverterDialogState extends State<CurrencyConverterDialog> {
         isLoading = false;
       });
       
-      print('✅ Converted price: $convertedPrice');
+      print(' Converted price: $convertedPrice');
     } catch (e) {
-      print('❌ Error converting currency: $e');
+      print(' Error converting currency: $e');
       setState(() {
         convertedPrice = '\$${widget.usdPrice.toStringAsFixed(2)}';
         isLoading = false;

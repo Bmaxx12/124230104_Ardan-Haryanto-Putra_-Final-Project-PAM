@@ -114,17 +114,13 @@ class ProPlanController {
 
     try {
       final result = await currencyService.convertCurrency('USD', targetCurrency, usdPrice);
-      
-      // Debug: Print response untuk melihat struktur data
       print('🔍 API Response: $result');
       
-      // Perbaikan: Cek struktur data yang sebenarnya dari API
       final convertedAmount = result['converted_amount'] ?? 
                              result['result'] ?? 
                              result['amount'] ?? 
                              usdPrice;
       
-      // Pastikan convertedAmount adalah double
       double finalAmount;
       if (convertedAmount is int) {
         finalAmount = convertedAmount.toDouble();
@@ -137,19 +133,14 @@ class ProPlanController {
       }
       
       final symbol = getCurrencySymbol(targetCurrency);
-      
-      // Format berdasarkan currency
       if (targetCurrency == 'IDR' || targetCurrency == 'JPY') {
-        // Untuk IDR dan JPY, tanpa desimal dan dengan separator
         String formatted = finalAmount.toStringAsFixed(0);
         return symbol + addThousandSeparator(formatted);
       } else {
-        // Untuk currency lain, dengan 2 desimal
         return symbol + finalAmount.toStringAsFixed(2);
       }
     } catch (e) {
       print('❌ Error converting currency: $e');
-      // Fallback ke USD jika konversi gagal
       return '\$${usdPrice.toStringAsFixed(2)}';
     }
   }
@@ -190,15 +181,14 @@ class ProPlanController {
         _showFreePlanMessage();
       }
     } else {
-      // Paid plan - akan ditangani oleh UI untuk show dialog
+
     }
   }
 
   void _showFreePlanMessage() {
     if (context == null || !context!.mounted) return;
     
-    // Akan ditangani di UI layer
-    // Placeholder untuk logic jika diperlukan
+
   }
 
   void confirmSubscription(String convertedPrice) {

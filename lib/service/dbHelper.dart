@@ -1,130 +1,47 @@
-
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io' as io;
 
-// ==== MODEL ====
-class PesanKesan {
+// ==== MODEL USER PROFILE ==== //
+class UserProfile {
   final int? id;
+  final String username;
   final String nama;
-  final String pesan;
-  final String kesan;
+  final String nim;
+  final String hobi;
+  final String motto;
 
-  PesanKesan({
+  UserProfile({
     this.id,
+    required this.username,
     required this.nama,
-    required this.pesan,
-    required this.kesan,
+    required this.nim,
+    required this.hobi,
+    required this.motto,
   });
 
-  // Konversi dari Map (Database) ke Object
-  factory PesanKesan.fromMap(Map<String, dynamic> map) {
-    return PesanKesan(
+  factory UserProfile.fromMap(Map<String, dynamic> map) {
+    return UserProfile(
       id: map['id'],
+      username: map['username'],
       nama: map['nama'],
-      pesan: map['pesan'],
-      kesan: map['kesan'],
+      nim: map['nim'],
+      hobi: map['hobi'],
+      motto: map['motto'],
     );
   }
 
-  // Konversi dari Object ke Map (untuk insert/update)
   Map<String, dynamic> toMap() {
     var map = <String, dynamic>{
+      'username': username,
       'nama': nama,
-      'pesan': pesan,
-      'kesan': kesan,
+      'nim': nim,
+      'hobi': hobi,
+      'motto': motto,
     };
-    if (id != null) {
-      map['id'] = id;
-    }
+    if (id != null) map['id'] = id;
     return map;
-  }
-}
-
-// ==== DATABASE HELPER ====
-class DatabaseHelper {
-  static final DatabaseHelper _instance = DatabaseHelper.internal();
-  factory DatabaseHelper() => _instance;
-  DatabaseHelper.internal();
-
-  static Database? _db;
-
-  Future<Database?> get db async {
-    if (_db != null) return _db;
-    _db = await initDb();
-    return _db;
-  }
-
-  Future<Database> initDb() async {
-    io.Directory docDirectory = await getApplicationDocumentsDirectory();
-    String path = join(docDirectory.path, 'weather.db');
-    var localDb = await openDatabase(
-      path,
-      version: 1,
-      onCreate: _onCreate,
-    );
-    return localDb;
-  }
-
-  void _onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS pesankesan(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nama TEXT NOT NULL,
-        pesan TEXT NOT NULL,
-        kesan TEXT NOT NULL
-      )
-    ''');
-  }
-
-  // ===== CREATE =====
-  Future<int> insertPesan(PesanKesan pesanKesan) async {
-    var dbClient = await db;
-    return await dbClient!.insert('pesankesan', pesanKesan.toMap());
-  }
-
-  // ===== READ =====
-  Future<List<PesanKesan>> getAllPesan() async {
-    var dbClient = await db;
-    var result = await dbClient!.query('pesankesan', orderBy: 'id DESC');
-    return result.map((e) => PesanKesan.fromMap(e)).toList();
-  }
-
-  // ===== UPDATE =====
-  Future<int> updatePesan(PesanKesan pesanKesan) async {
-    var dbClient = await db;
-    return await dbClient!.update(
-      'pesankesan',
-      pesanKesan.toMap(),
-      where: 'id = ?',
-      whereArgs: [pesanKesan.id],
-    );
-  }
-
-  // ===== DELETE =====
-  Future<int> deletePesan(int id) async {
-    var dbClient = await db;
-    return await dbClient!.delete(
-      'pesankesan',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  // ===== DELETE ALL (optional) =====
-  Future<int> deleteAllPesan() async {
-    var dbClient = await db;
-    return await dbClient!.delete('pesankesan');
-  }
-
-  // ===== COUNT DATA (optional) =====
-  Future<int> getCount() async {
-    var dbClient = await db;
-    return Sqflite.firstIntValue(
-          await dbClient!.rawQuery('SELECT COUNT(*) FROM pesankesan'),
-        ) ??
-        0;
   }
 }
 
@@ -132,7 +49,7 @@ class DatabaseHelper {
 class UserModel {
   final int? id;
   final String username;
-  final String password; // disimpan dalam bentuk hash (sha256)
+  final String password;
 
   UserModel({
     this.id,
@@ -158,9 +75,108 @@ class UserModel {
   }
 }
 
+// ==== DATABASE HELPER ====
+class DatabaseHelper {
+  static final DatabaseHelper _instance = DatabaseHelper.internal();
+  factory DatabaseHelper() => _instance;
+  DatabaseHelper.internal();
+
+  static Database? _db;
+
+  Future<Database?> get db async {
+    if (_db != null) return _db;
+    _db = await initDb();
+    return _db;
+  }
+
+  Future<Database> initDb() async {
+    io.Directory docDirectory = await getApplicationDocumentsDirectory();
+    String path = join(docDirectory.path, 'weather.db');
+    var localDb = await openDatabase(
+      path,
+      version: 3, // Updated version to trigger migration
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
+    return localDb;
+  }
+
+  void _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS users(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_profiles(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        nama TEXT NOT NULL,
+        nim TEXT NOT NULL,
+        hobi TEXT NOT NULL,
+        motto TEXT NOT NULL
+      )
+    ''');
+  }
+
+  void _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS user_profiles(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT UNIQUE NOT NULL,
+          nama TEXT NOT NULL,
+          nim TEXT NOT NULL,
+          hobi TEXT NOT NULL,
+          motto TEXT NOT NULL
+        )
+      ''');
+    }
+    
+    // Drop pesankesan table if it exists (version 3)
+    if (oldVersion < 3) {
+      await db.execute('DROP TABLE IF EXISTS pesankesan');
+    }
+  }
+
+  // ===== USER PROFILE METHODS =====
+  Future<int> insertOrUpdateProfile(UserProfile profile) async {
+    var dbClient = await db;
+    var existing = await getProfileByUsername(profile.username);
+    
+    if (existing != null) {
+      return await dbClient!.update(
+        'user_profiles',
+        profile.toMap(),
+        where: 'username = ?',
+        whereArgs: [profile.username],
+      );
+    } else {
+      return await dbClient!.insert('user_profiles', profile.toMap());
+    }
+  }
+
+  Future<UserProfile?> getProfileByUsername(String username) async {
+    var dbClient = await db;
+    var result = await dbClient!.query(
+      'user_profiles',
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+
+    if (result.isNotEmpty) {
+      return UserProfile.fromMap(result.first);
+    }
+    return null;
+  }
+}
+
 // ==== FITUR REGISTER & LOGIN USER ==== //
 extension UserAuthExtension on DatabaseHelper {
-  // Membuat tabel users jika belum ada
+
   Future<void> _createUserTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS users(
@@ -171,7 +187,6 @@ extension UserAuthExtension on DatabaseHelper {
     ''');
   }
 
-  // Panggil fungsi ini saat pertama kali membuka database (opsional)
   Future<void> ensureUserTableExists() async {
     var dbClient = await db;
     await _createUserTable(dbClient!);
@@ -200,4 +215,3 @@ extension UserAuthExtension on DatabaseHelper {
     return null;
   }
 }
-

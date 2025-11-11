@@ -7,11 +7,12 @@ import 'package:finalproject/pages/loginScreen.dart';
 class RegisterController {
   final TextEditingController userController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
   final DatabaseHelper dbHelper = DatabaseHelper();
   
-  bool isObscure = true;
-
-  ValueNotifier<bool> get isObscureNotifier => ValueNotifier(isObscure);
+  // PERBAIKAN: Buat instance ValueNotifier yang proper
+  final ValueNotifier<bool> isObscureNotifier = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> isObscureConfirmNotifier = ValueNotifier<bool>(true);
 
   String encryptPassword(String password) {
     var bytes = utf8.encode(password);
@@ -26,17 +27,41 @@ class RegisterController {
     );
   }
 
-  /// 📋 Register handler
+  /// 📋 Register handler dengan validasi konfirmasi password
   Future<void> register(BuildContext context) async {
     String username = userController.text.trim();
     String password = passwordController.text.trim();
+    String confirmPassword = confirmPasswordController.text.trim();
 
-    // Validasi input
-    if (username.isEmpty || password.isEmpty) {
+    // Validasi input kosong
+    if (username.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Username dan password tidak boleh kosong"),
+          content: Text("Semua field harus diisi"),
           backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validasi password minimal 6 karakter
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Password minimal 6 karakter"),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // VALIDASI: Cek apakah password dan confirm password sama
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Password dan Konfirmasi Password tidak cocok!"),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
         ),
       );
       return;
@@ -52,7 +77,7 @@ class RegisterController {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text("Registrasi berhasil! Silakan login."),
+            content: const Text("✅ Registrasi berhasil! Silakan login."),
             backgroundColor: Colors.green[700],
           ),
         );
@@ -66,7 +91,7 @@ class RegisterController {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text("Username sudah terdaftar atau error."),
+            content: const Text("❌ Username sudah terdaftar atau error."),
             backgroundColor: Colors.red[800],
           ),
         );
@@ -74,15 +99,21 @@ class RegisterController {
     }
   }
 
- 
+  // PERBAIKAN: Toggle visibility untuk password
   void togglePasswordVisibility() {
-    isObscure = !isObscure;
-    isObscureNotifier.value = isObscure;
+    isObscureNotifier.value = !isObscureNotifier.value;
+  }
+
+  // PERBAIKAN: Toggle visibility untuk confirm password
+  void toggleConfirmPasswordVisibility() {
+    isObscureConfirmNotifier.value = !isObscureConfirmNotifier.value;
   }
 
   void dispose() {
     userController.dispose();
     passwordController.dispose();
+    confirmPasswordController.dispose();
     isObscureNotifier.dispose();
+    isObscureConfirmNotifier.dispose();
   }
 }

@@ -22,109 +22,128 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // --- Header Text ---
-              const Center(
-                child: Text(
-                  "Create Account\nJoin Us Today!",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              
-              // --- Illustration Image ---
-              Image.asset(
-                "assets/images/cloudy.png", 
-                height: 200
-              ),
-              const SizedBox(height: 40),
-
-              // --- Username Field ---
-              CustomTextfield(
-                controller: _controller.userController,
-                textInputType: TextInputType.text,
-                textInputAction: TextInputAction.next,
-                hint: 'Username',
-              ),
-              const SizedBox(height: 16),
-
-              // --- Password Field ---
-              ValueListenableBuilder<bool>(
-                valueListenable: _controller.isObscureNotifier,
-                builder: (context, isObscure, child) {
-                  return CustomTextfield(
-                    controller: _controller.passwordController,
-                    textInputType: TextInputType.visiblePassword,
-                    textInputAction: TextInputAction.done,
-                    hint: 'Password',
-                    isObscure: isObscure,
-                    hasSuffix: true,
-                    onPressed: _controller.togglePasswordVisibility,
-                  );
-                },
-              ),
-              const SizedBox(height: 30),
-
-              // --- Register Button ---
-              ElevatedButton(
-                onPressed: () => _controller.register(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orangeAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 50, vertical: 15),
-                ),
-                child: const Text(
-                  "Register",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-
-              const Spacer(),
-
-              // --- Login Link ---
-              Center(
-                child: GestureDetector(
-                  onTap: () => _controller.goToLogin(context),
-                  child: RichText(
-                    text: const TextSpan(
-                      text: "Sudah punya akun? ",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white70,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: "Login!",
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.orangeAccent,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+        child: SingleChildScrollView( // TAMBAHAN: Agar bisa scroll jika keyboard muncul
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // --- Header Text ---
+                const Center(
+                  child: Text(
+                    "Create Account\nJoin Us Today!",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                      height: 1.2,
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 40),
+                
+                // --- Illustration Image ---
+                Image.asset(
+                  "assets/images/cloudy.png", 
+                  height: 180, // Dikurangi sedikit agar muat dengan field baru
+                ),
+                const SizedBox(height: 40),
+
+                // --- Username Field ---
+                CustomTextfield(
+                  controller: _controller.userController,
+                  textInputType: TextInputType.text,
+                  textInputAction: TextInputAction.next,
+                  hint: 'Username',
+                ),
+                const SizedBox(height: 16),
+
+                // --- Password Field ---
+                ValueListenableBuilder<bool>(
+                  valueListenable: _controller.isObscureNotifier,
+                  builder: (context, isObscure, child) {
+                    return CustomTextfield(
+                      controller: _controller.passwordController,
+                      textInputType: TextInputType.visiblePassword,
+                      textInputAction: TextInputAction.next, // UBAH: dari done ke next
+                      hint: 'Password',
+                      isObscure: isObscure,
+                      hasSuffix: true,
+                      onPressed: _controller.togglePasswordVisibility,
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // --- KONFIRMASI PASSWORD FIELD (BARU) ---
+                ValueListenableBuilder<bool>(
+                  valueListenable: _controller.isObscureConfirmNotifier,
+                  builder: (context, isObscureConfirm, child) {
+                    return CustomTextfield(
+                      controller: _controller.confirmPasswordController,
+                      textInputType: TextInputType.visiblePassword,
+                      textInputAction: TextInputAction.done,
+                      hint: 'Konfirmasi Password',
+                      isObscure: isObscureConfirm,
+                      hasSuffix: true,
+                      onPressed: _controller.toggleConfirmPasswordVisibility,
+                    );
+                  },
+                ),
+                const SizedBox(height: 30),
+
+                // --- Register Button ---
+                ElevatedButton(
+                  onPressed: () => _controller.register(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orangeAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 50, vertical: 15),
+                  ),
+                  child: const Text(
+                    "Register",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20), // UBAH: dari Spacer() ke SizedBox fixed height
+
+                // --- Login Link ---
+                Center(
+                  child: GestureDetector(
+                    onTap: () => _controller.goToLogin(context),
+                    child: RichText(
+                      text: const TextSpan(
+                        text: "Sudah punya akun? ",
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.white70,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: "Login!",
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.orangeAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
