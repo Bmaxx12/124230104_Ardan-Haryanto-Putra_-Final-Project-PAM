@@ -18,7 +18,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
   void initState() {
     super.initState();
     
-    // Initialize animation
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -28,7 +27,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
     );
     _animationController.forward();
     
-    // Initialize controller
     _controller = ProPlanController(context: context);
     _controller.onStateChanged = () {
       if (mounted) {
@@ -78,8 +76,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
     );
   }
 
-  // ========== APPBAR ==========
-  
   SliverAppBar _buildAppBar() {
     return SliverAppBar(
       expandedHeight: 200,
@@ -141,8 +137,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
       ),
     );
   }
-
-  // ========== PLAN CARD ==========
 
   Widget _buildPlanCard(Map<String, dynamic> plan, int index) {
     final isSelected = _controller.isPlanSelected(index);
@@ -322,8 +316,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
     );
   }
 
-  // ========== SUBSCRIBE BUTTON ==========
-
   Widget _buildSubscribeButton() {
     final color = _controller.getSelectedPlanColor();
 
@@ -366,8 +358,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
       ),
     );
   }
-
-  // ========== FEATURES COMPARISON ==========
 
   Widget _buildFeaturesComparison() {
     return Container(
@@ -458,8 +448,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
     );
   }
 
-  // ========== DIALOGS ==========
-
   void _showSubscribeDialog() {
     final selectedPlan = _controller.selectedPlan;
     final double usdPrice = selectedPlan['price'] as double;
@@ -536,8 +524,6 @@ class _PlanProPageState extends State<PlanProPage> with SingleTickerProviderStat
   }
 }
 
-// ========== CURRENCY CONVERTER DIALOG ==========
-
 class CurrencyConverterDialog extends StatefulWidget {
   final ProPlanController controller;
   final Map<String, dynamic> selectedPlan;
@@ -591,9 +577,7 @@ class _CurrencyConverterDialogState extends State<CurrencyConverterDialog> {
         isLoading = false;
       });
       
-      print(' Converted price: $convertedPrice');
     } catch (e) {
-      print(' Error converting currency: $e');
       setState(() {
         convertedPrice = '\$${widget.usdPrice.toStringAsFixed(2)}';
         isLoading = false;
@@ -679,12 +663,15 @@ class _CurrencyConverterDialogState extends State<CurrencyConverterDialog> {
                             size: 20,
                           ),
                           const SizedBox(width: 8),
-                          const Text(
-                            'Pilih Mata Uang Pembayaran',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                          Expanded(
+                            child: const Text(
+                              'Pilih Mata Uang Pembayaran',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
