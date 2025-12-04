@@ -86,6 +86,19 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     super.dispose();
   }
 
+  // Helper untuk mendapatkan teks arah mata angin
+  String _getDirection(double heading) {
+    if (heading >= 337.5 || heading < 22.5) return 'N';
+    if (heading >= 22.5 && heading < 67.5) return 'NE';
+    if (heading >= 67.5 && heading < 112.5) return 'E';
+    if (heading >= 112.5 && heading < 157.5) return 'SE';
+    if (heading >= 157.5 && heading < 202.5) return 'S';
+    if (heading >= 202.5 && heading < 247.5) return 'SW';
+    if (heading >= 247.5 && heading < 292.5) return 'W';
+    if (heading >= 292.5 && heading < 337.5) return 'NW';
+    return 'N';
+  }
+
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = prefs.getString('username') ?? 'Guest';
@@ -776,7 +789,7 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
               },
             ),
 
-            // ===== WIDGET KOMPAS (REAL) =====
+            // ===== WIDGET KOMPAS (ROTATING CARD / KARTU BERPUTAR) =====
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
               padding: const EdgeInsets.all(15),
@@ -804,26 +817,41 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
                   const SizedBox(height: 15),
                   Center(
                     child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.orange, width: 2),
-                        gradient: const RadialGradient(
-                          colors: [Colors.black54, Colors.black87],
-                        ),
-                      ),
+                      width: 150,
+                      height: 150,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
+                          // 1. KARTU KOMPAS YANG BERPUTAR (N/S/E/W)
+                          // Berputar berlawanan dengan arah heading HP (-heading)
                           Transform.rotate(
                             angle: ((_heading ?? 0) * (math.pi / 180) * -1),
-                            child: const Icon(Icons.arrow_upward_rounded, color: Colors.redAccent, size: 40),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.orange.withOpacity(0.5), width: 2),
+                                gradient: RadialGradient(
+                                  colors: [Colors.black54, Colors.blueGrey.shade900],
+                                ),
+                              ),
+                              child: Stack(
+                                children: const [
+                                  // Huruf N (Utara) - Selalu di "Atas" kartu
+                                  Positioned(top: 8, left: 0, right: 0, child: Center(child: Text('N', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)))),
+                                  // Huruf S (Selatan)
+                                  Positioned(bottom: 8, left: 0, right: 0, child: Center(child: Text('S', style: TextStyle(color: Colors.white70)))),
+                                  // Huruf E (Timur)
+                                  Positioned(right: 8, top: 0, bottom: 0, child: Center(child: Text('E', style: TextStyle(color: Colors.white70)))),
+                                  // Huruf W (Barat)
+                                  Positioned(left: 8, top: 0, bottom: 0, child: Center(child: Text('W', style: TextStyle(color: Colors.white70)))),
+                                ],
+                              ),
+                            ),
                           ),
-                          const Positioned(top: 5, child: Text('N', style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold))),
-                          const Positioned(bottom: 5, child: Text('S', style: TextStyle(color: Colors.white54, fontSize: 12))),
-                          const Positioned(right: 5, child: Text('E', style: TextStyle(color: Colors.white54, fontSize: 12))),
-                          const Positioned(left: 5, child: Text('W', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                          
+                          // 2. INDIKATOR PANAH DIAM (FIXED)
+                          // Menunjuk ke arah hadap HP
+                          const Icon(Icons.arrow_drop_up, color: Colors.orangeAccent, size: 50),
                         ],
                       ),
                     ),
@@ -833,10 +861,11 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
                     child: Text(
                       _heading == null 
                           ? "Calibrating..." 
-                          : "${_heading!.toStringAsFixed(0)}° ${_heading! < 0 ? 'W' : 'E'}",
+                          : "${_heading!.toStringAsFixed(0)}° ${_getDirection(_heading!)}",
                       style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: 12,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),

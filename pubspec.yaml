@@ -36,6 +36,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Tambahkan bagian ini untuk mengimpor gambar dari folder assets/images
+
   assets:
     - assets/images/
