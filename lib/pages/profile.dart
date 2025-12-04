@@ -16,27 +16,23 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final picker = ImagePicker();
 
-  // Data diri yang sekarang dinamis
   String nama = "";
   String nim = "";
   String hobi = "";
   String motto = "";
   String currentUsername = "";
+  String currentPlan = "Basic"; // Variabel Plan
   String? profileImagePath;
 
-  // Mode edit
   bool isEditMode = false;
 
-  // Database Helper
   final dbHelper = DatabaseHelper();
 
-  // Controllers untuk edit profile
   final _editNamaController = TextEditingController();
   final _editNimController = TextEditingController();
   final _editHobiController = TextEditingController();
   final _editMottoController = TextEditingController();
 
-  // Data Pesan & Kesan Statis
   final String pesanStatis = "Terima kasih atas pembelajaran yang sangat bermanfaat. "
       "Semoga ilmu yang diberikan dapat saya terapkan dengan baik di masa depan.";
   
@@ -59,7 +55,6 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // Load profile image dari SharedPreferences
   Future<void> loadProfileImage() async {
     final prefs = await SharedPreferences.getInstance();
     final savedPath = prefs.getString('profile_image_$currentUsername');
@@ -70,7 +65,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Pilih gambar dari device
   Future<void> pickImage() async {
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
@@ -87,13 +81,15 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Load data user dari SharedPreferences dan Database
   Future<void> loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     currentUsername = prefs.getString('username') ?? '';
 
     if (currentUsername.isNotEmpty) {
+      // Load Profile
       final profile = await dbHelper.getProfileByUsername(currentUsername);
+      // Load Plan (LOGIC BARU)
+      final plan = await dbHelper.getUserPlan(currentUsername);
 
       if (profile != null) {
         setState(() {
@@ -101,6 +97,7 @@ class _ProfilePageState extends State<ProfilePage> {
           nim = profile.nim;
           hobi = profile.hobi;
           motto = profile.motto;
+          currentPlan = plan; // Set plan
           _editNamaController.text = nama;
           _editNimController.text = nim;
           _editHobiController.text = hobi;
@@ -112,19 +109,17 @@ class _ProfilePageState extends State<ProfilePage> {
           nim = "Belum diisi";
           hobi = "Belum diisi";
           motto = "Belum diisi";
+          currentPlan = plan; // Set plan meski profile kosong
         });
       }
     }
   }
 
-  // Toggle edit mode
   void toggleEditMode() {
     setState(() {
       if (isEditMode) {
-        // Simpan data
         saveProfile();
       } else {
-        // Masuk mode edit
         _editNamaController.text = nama == "Belum diisi" ? "" : nama;
         _editNimController.text = nim == "Belum diisi" ? "" : nim;
         _editHobiController.text = hobi == "Belum diisi" ? "" : hobi;
@@ -134,7 +129,6 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  // Simpan profile ke database
   Future<void> saveProfile() async {
     if (_editNamaController.text.isEmpty ||
         _editNimController.text.isEmpty ||
@@ -171,7 +165,44 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ==== LOGOUT ====
+  // ==== LOGIC CANCEL MEMBERSHIP (BARU) ====
+  Future<void> cancelMembership() async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text("Batalkan Langganan?", style: TextStyle(color: Colors.white)),
+        content: Text(
+          "Anda akan kehilangan akses ke fitur $currentPlan. Yakin ingin kembali ke Basic?",
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Tidak", style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              // Update DB ke Basic
+              await dbHelper.updateUserPlan(currentUsername, 'Basic');
+              // Reload UI
+              await loadUserData();
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Langganan berhasil dibatalkan."),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            child: const Text("Ya, Batalkan", style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -212,7 +243,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ==== UI ====
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -242,7 +272,6 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           children: [
-            // Profile Section dengan desain minimalis
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -252,7 +281,6 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               child: Column(
                 children: [
-                  // Profile Picture
                   GestureDetector(
                     onTap: pickImage,
                     child: Stack(
@@ -295,7 +323,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Toggle Edit Button
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
@@ -337,7 +364,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Profile Info
                   if (!isEditMode) ...[
                     _buildInfoRow(Icons.person_outline, "Nama", nama),
                     _buildInfoRow(Icons.badge_outlined, "NIM", nim),
@@ -356,9 +382,87 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
 
+            // ===== SECTION PLAN INFO BARU =====
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: currentPlan == 'Premium'
+                      ? [Colors.deepPurple.shade900, Colors.purple.shade700]
+                      : currentPlan == 'Pro'
+                          ? [Colors.orange.shade900, Colors.orange.shade700]
+                          : [Colors.grey.shade900, Colors.grey.shade800],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Paket Langganan",
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            currentPlan,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Icon(
+                        currentPlan == 'Premium' ? Icons.stars : 
+                        currentPlan == 'Pro' ? Icons.verified : Icons.account_circle,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                    ],
+                  ),
+                  if (currentPlan != 'Basic') ...[
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white24),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: cancelMembership,
+                        icon: const Icon(Icons.cancel_outlined, color: Colors.white70),
+                        label: const Text(
+                          "Batalkan Langganan",
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.redAccent.withOpacity(0.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ),
+            
             const SizedBox(height: 32),
 
-            // Section Title - Pesan & Kesan Statis
             Row(
               children: [
                 Container(
@@ -382,7 +486,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 16),
 
-            // Container Pesan Statis
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -393,7 +496,6 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Pesan
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -438,14 +540,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 20),
                   
-                  // Divider
                   Container(
                     height: 1,
                     color: Colors.white10,
                   ),
                   const SizedBox(height: 20),
 
-                  // Kesan
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:finalproject/service/apiService.dart';
+import 'package:finalproject/service/dbHelper.dart'; // Import DB Helper
+import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 
 class ProPlanController {
   // State variables
   int selectedPlanIndex = 1; // Default: Pro Plan
   String selectedCurrency = 'USD';
-  
+
   // Services
   final CurrencyService currencyService = CurrencyService();
-  
+  final DatabaseHelper dbHelper = DatabaseHelper(); // Instance DB Helper
+
   // Context untuk SnackBar
   BuildContext? context;
-  
+
   // Callback untuk update UI
   Function()? onStateChanged;
 
-  // Animation Controller (akan dihandle di UI)
-  
   // Available Currencies
   final List<Map<String, String>> availableCurrencies = [
     {'code': 'USD', 'name': 'US Dollar', 'symbol': '\$'},
@@ -107,20 +108,28 @@ class ProPlanController {
 
   // ========== CURRENCY CONVERSION ==========
 
-  Future<String> getConvertedPrice(double usdPrice, String targetCurrency) async {
+  Future<String> getConvertedPrice(
+    double usdPrice,
+    String targetCurrency,
+  ) async {
     if (targetCurrency == 'USD') {
       return '\$${usdPrice.toStringAsFixed(2)}';
     }
 
     try {
-      final result = await currencyService.convertCurrency('USD', targetCurrency, usdPrice);
+      final result = await currencyService.convertCurrency(
+        'USD',
+        targetCurrency,
+        usdPrice,
+      );
       print('🔍 API Response: $result');
-      
-      final convertedAmount = result['converted_amount'] ?? 
-                             result['result'] ?? 
-                             result['amount'] ?? 
-                             usdPrice;
-      
+
+      final convertedAmount =
+          result['converted_amount'] ??
+          result['result'] ??
+          result['amount'] ??
+          usdPrice;
+
       double finalAmount;
       if (convertedAmount is int) {
         finalAmount = convertedAmount.toDouble();
@@ -131,7 +140,7 @@ class ProPlanController {
       } else {
         finalAmount = usdPrice;
       }
-      
+
       final symbol = getCurrencySymbol(targetCurrency);
       if (targetCurrency == 'IDR' || targetCurrency == 'JPY') {
         String formatted = finalAmount.toStringAsFixed(0);
@@ -149,19 +158,19 @@ class ProPlanController {
     final parts = number.split('.');
     final integerPart = parts[0];
     final buffer = StringBuffer();
-    
+
     for (int i = 0; i < integerPart.length; i++) {
       if (i > 0 && (integerPart.length - i) % 3 == 0) {
         buffer.write(',');
       }
       buffer.write(integerPart[i]);
     }
-    
+
     if (parts.length > 1) {
       buffer.write('.');
       buffer.write(parts[1]);
     }
-    
+
     return buffer.toString();
   }
 
@@ -176,35 +185,49 @@ class ProPlanController {
 
   void handleSubscription() {
     if (selectedPlanIndex == 0) {
-      // Free plan
-      if (context != null && context!.mounted) {
-        _showFreePlanMessage();
-      }
+      // Free plan logic if needed
     } else {
-
+      // Pro/Premium logic handled by dialog
     }
   }
 
-  void _showFreePlanMessage() {
-    if (context == null || !context!.mounted) return;
-    
-
-  }
-
-  void confirmSubscription(String convertedPrice) {
+  // LOGIC UPDATE PLAN DI SINI
+  Future<void> confirmSubscription(String convertedPrice) async {
     if (context == null || !context!.mounted) return;
 
     final plan = selectedPlan;
-    
-    ScaffoldMessenger.of(context!).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Berlangganan ${plan['name']} berhasil!\nPembayaran: $convertedPrice${plan['duration']}',
+    final planName = plan['name'] as String;
+
+    try {
+      // 1. Ambil username yang sedang login
+      final prefs = await SharedPreferences.getInstance();
+      final username = prefs.getString('username');
+
+      if (username != null) {
+        // 2. Update status plan di database
+        await dbHelper.updateUserPlan(username, planName);
+
+        // 3. Tampilkan sukses
+        ScaffoldMessenger.of(context!).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Berlangganan $planName berhasil!\nAkses fitur premium telah dibuka.',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        throw Exception("User session not found");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context!).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengupdate plan: $e'),
+          backgroundColor: Colors.red,
         ),
-        backgroundColor: plan['color'] as Color,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    }
   }
 
   // ========== GETTERS ==========
@@ -214,8 +237,8 @@ class ProPlanController {
   Color getSelectedPlanColor() => selectedPlan['color'] as Color;
 
   String getSubscribeButtonText() {
-    return selectedPlanIndex == 0 
-        ? 'Gunakan Gratis' 
+    return selectedPlanIndex == 0
+        ? 'Gunakan Gratis'
         : 'Berlangganan ${selectedPlan['name']}';
   }
 }

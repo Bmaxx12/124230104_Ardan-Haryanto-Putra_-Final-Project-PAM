@@ -50,11 +50,13 @@ class UserModel {
   final int? id;
   final String username;
   final String password;
+  final String subscriptionPlan; // Tambahan field baru
 
   UserModel({
     this.id,
     required this.username,
     required this.password,
+    this.subscriptionPlan = 'Basic', // Default Basic
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
@@ -62,6 +64,7 @@ class UserModel {
       id: map['id'],
       username: map['username'],
       password: map['password'],
+      subscriptionPlan: map['subscription_plan'] ?? 'Basic',
     );
   }
 
@@ -69,6 +72,7 @@ class UserModel {
     var map = <String, dynamic>{
       'username': username,
       'password': password,
+      'subscription_plan': subscriptionPlan,
     };
     if (id != null) map['id'] = id;
     return map;
@@ -91,10 +95,10 @@ class DatabaseHelper {
 
   Future<Database> initDb() async {
     io.Directory docDirectory = await getApplicationDocumentsDirectory();
-    String path = join(docDirectory.path, 'weather.db');
+    String path = join(docDirectory.path, 'weather_v2.db'); // Ganti nama DB biar fresh atau handle migration
     var localDb = await openDatabase(
       path,
-      version: 3, // Updated version to trigger migration
+      version: 4, // Naikkan versi ke 4
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -102,11 +106,13 @@ class DatabaseHelper {
   }
 
   void _onCreate(Database db, int version) async {
+    // Tambahkan kolom subscription_plan
     await db.execute('''
       CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
+        password TEXT NOT NULL,
+        subscription_plan TEXT DEFAULT 'Basic' 
       )
     ''');
 
@@ -136,10 +142,48 @@ class DatabaseHelper {
       ''');
     }
     
-    // Drop pesankesan table if it exists (version 3)
     if (oldVersion < 3) {
       await db.execute('DROP TABLE IF EXISTS pesankesan');
     }
+
+    // Migration ke versi 4: Tambah kolom subscription_plan jika belum ada
+    if (oldVersion < 4) {
+      try {
+        await db.execute("ALTER TABLE users ADD COLUMN subscription_plan TEXT DEFAULT 'Basic'");
+      } catch (e) {
+        print("Error upgrading db: $e");
+      }
+    }
+  }
+
+  // ===== USER SUBSCRIPTION METHODS (BARU) =====
+  
+  // Update Plan User
+  Future<void> updateUserPlan(String username, String newPlan) async {
+    var dbClient = await db;
+    await dbClient!.update(
+      'users',
+      {'subscription_plan': newPlan},
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+    print("✅ Plan updated to $newPlan for user $username");
+  }
+
+  // Get User Plan
+  Future<String> getUserPlan(String username) async {
+    var dbClient = await db;
+    var result = await dbClient!.query(
+      'users',
+      columns: ['subscription_plan'],
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+
+    if (result.isNotEmpty) {
+      return result.first['subscription_plan'] as String? ?? 'Basic';
+    }
+    return 'Basic';
   }
 
   // ===== USER PROFILE METHODS =====
@@ -182,27 +226,26 @@ extension UserAuthExtension on DatabaseHelper {
       CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
+        password TEXT NOT NULL,
+        subscription_plan TEXT DEFAULT 'Basic'
       )
     ''');
   }
 
   Future<void> ensureUserTableExists() async {
     var dbClient = await db;
-    await _createUserTable(dbClient!);
+    // Cek apakah tabel ada, jika tidak create (logic simplified handled by onCreate/onUpgrade mostly)
   }
 
   // REGISTER USER
   Future<int> registerUser(UserModel user) async {
     var dbClient = await db;
-    await ensureUserTableExists();
     return await dbClient!.insert('users', user.toMap());
   }
 
   // LOGIN USER
   Future<UserModel?> loginUser(String username, String password) async {
     var dbClient = await db;
-    await ensureUserTableExists();
     var result = await dbClient!.query(
       'users',
       where: 'username = ? AND password = ?',

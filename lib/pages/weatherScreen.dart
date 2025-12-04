@@ -11,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:finalproject/pages/weatherAiScreen.dart';
+import 'package:finalproject/service/dbHelper.dart'; 
 
 class WeaterScreen extends ConsumerStatefulWidget {
   const WeaterScreen({super.key});
@@ -21,6 +22,8 @@ class WeaterScreen extends ConsumerStatefulWidget {
 
 class _WeaterScreenState extends ConsumerState<WeaterScreen> {
   final _weatherService = WeatherApiService();
+  final DatabaseHelper dbHelper = DatabaseHelper();
+  
   String city = "Jakarta";
   String country = '';
   Map<String, dynamic> currentValue = {};
@@ -28,22 +31,19 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
   bool isLoading = false;
   bool isLoadingLocation = false;
   String username = '';
+  String userPlan = 'Basic'; 
 
-  // Untuk waktu & zona
   String selectedZone = 'WIB';
   late Timer _timer;
   late DateTime _currentTime;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Notifikasi
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
   
-  // Kontrol notifikasi
   bool _enableNotifications = true;
   DateTime? _lastNotificationTime;
   
-  // Timer untuk delay notifikasi setelah kembali ke halaman
   Timer? _notificationDelayTimer;
   bool _allowNotification = false;
   static const int _notificationDelaySeconds = 5;
@@ -55,9 +55,8 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     _startClock();
     _initializeNotifications();
     _fetchWeather();
-    _loadUsername();
+    _loadUserData();
     
-    // Set timer untuk mengizinkan notifikasi setelah 5 detik
     _startNotificationDelayTimer();
   }
 
@@ -70,22 +69,27 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     super.dispose();
   }
 
-  // Load username dari SharedPreferences
-  Future<void> _loadUsername() async {
+  Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      username = prefs.getString('username') ?? 'Guest';
-    });
+    final user = prefs.getString('username') ?? 'Guest';
+    
+    String plan = 'Basic';
+    if (user != 'Guest') {
+      plan = await dbHelper.getUserPlan(user);
+    }
+
+    if (mounted) {
+      setState(() {
+        username = user;
+        userPlan = plan;
+      });
+    }
   }
 
-  // ========== FITUR GEOLOKASI BARU ==========
-  
-  /// Cek dan request permission lokasi
   Future<bool> _handleLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // Cek apakah GPS aktif
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) {
@@ -99,7 +103,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
       return false;
     }
 
-    // Cek permission
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -131,16 +134,12 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     return true;
   }
 
-  /// Dapatkan lokasi saat ini dan update cuaca
   Future<void> _getCurrentLocation() async {
-    print('\n📍 === GETTING CURRENT LOCATION ===');
-    
     setState(() {
       isLoadingLocation = true;
     });
 
     try {
-      // Cek permission dulu
       final hasPermission = await _handleLocationPermission();
       if (!hasPermission) {
         setState(() {
@@ -149,15 +148,8 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
         return;
       }
 
-      // Dapatkan posisi
-      print('🌍 Getting position...');
-      Position position = await Geolocator.getCurrentPosition(
-      );
+      Position position = await Geolocator.getCurrentPosition();
 
-      print('✅ Position obtained: ${position.latitude}, ${position.longitude}');
-
-      // Reverse geocoding untuk mendapatkan nama kota
-      print('🏙️ Getting city name...');
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
@@ -166,15 +158,10 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         
-        // Prioritas: locality > subAdministrativeArea > administrativeArea
         String detectedCity = 
                              place.subAdministrativeArea ?? 
                              place.administrativeArea ?? 
                              'Unknown';
-
-        print('✅ Detected city: $detectedCity');
-        print('   Country: ${place.country}');
-        print('   Admin Area: ${place.administrativeArea}');
 
         if (mounted) {
           setState(() {
@@ -190,7 +177,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
             ),
           );
 
-          // Fetch weather untuk lokasi baru
           _fetchWeather();
         }
       } else {
@@ -198,8 +184,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
       }
 
     } catch (e) {
-      print('❌ Error getting location: $e');
-      
       if (mounted) {
         setState(() {
           isLoadingLocation = false;
@@ -222,15 +206,9 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
         );
       }
     }
-    
-    print('=== END GETTING LOCATION ===\n');
   }
 
-  // ========== END FITUR GEOLOKASI ==========
-
-  // Timer untuk delay notifikasi
   void _startNotificationDelayTimer() {
-    print('⏳ Starting notification delay timer ($_notificationDelaySeconds seconds)...');
     _allowNotification = false;
     
     _notificationDelayTimer?.cancel();
@@ -241,7 +219,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
           setState(() {
             _allowNotification = true;
           });
-          print('✅ Notification timer completed. Notifications now allowed.');
           
           if (currentValue.isNotEmpty) {
             _checkWeatherAndNotify();
@@ -251,32 +228,23 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     );
   }
 
-  // Inisialisasi notifikasi
   Future<void> _initializeNotifications() async {
-    print('🔔 Initializing notifications...');
-    
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
 
-    final bool? initialized = await flutterLocalNotificationsPlugin.initialize(
+    await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        print('📬 Notification tapped: ${response.payload}');
       },
     );
-    
-    print('✅ Notifications initialized: $initialized');
     
     await _requestNotificationPermission();
   }
 
-  // Request permission
   Future<void> _requestNotificationPermission() async {
-    print('🔐 Requesting notification permission...');
-    
     final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
         flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
@@ -284,10 +252,8 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     if (androidImplementation != null) {
       final bool? granted = await androidImplementation
           .requestNotificationsPermission();
-      print('🔐 Permission granted: $granted');
       
       if (granted == false) {
-        print('⚠️ Notification permission denied!');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -297,27 +263,18 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
           );
         }
       }
-    } else {
-      print('⚠️ Android implementation is null');
     }
   }
 
-  // Tampilkan notifikasi
   Future<void> _showNotification(String title, String body) async {
-    print('\n🔔 === SHOWING NOTIFICATION ===');
-    print('Title: $title');
-    print('Body: $body');
-    
     final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
         flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     
     if (androidImplementation != null) {
       final bool? enabled = await androidImplementation.areNotificationsEnabled();
-      print('Notifications Enabled in System: $enabled');
       
       if (enabled == false) {
-        print('❌ Notifications are disabled in system settings!');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -349,7 +306,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
 
     try {
       final int notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      print('Notification ID: $notificationId');
       
       await flutterLocalNotificationsPlugin.show(
         notificationId,
@@ -357,13 +313,7 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
         body,
         notificationDetails,
       );
-      
-      print('✅ Notification sent successfully!');
-      print('=== END NOTIFICATION ===\n');
     } catch (e) {
-      print('❌ Error sending notification: $e');
-      print('Error details: ${e.toString()}');
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -385,7 +335,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
   }
 
   Future<void> _fetchWeather() async {
-    print('\n🌍 Fetching weather for: $city');
     setState(() => isLoading = true);
 
     try {
@@ -398,17 +347,10 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
         isLoading = false;
       });
 
-      print('✅ Weather data fetched successfully');
-      print('📍 Location: $city, $country');
-      print('🌡️ Temperature: ${currentValue['temp_c']}°C');
-      
       if (_allowNotification) {
         _checkWeatherAndNotify();
-      } else {
-        print('⏳ Notification delayed. Timer still running.');
       }
     } catch (e) {
-      print('❌ Error fetching weather: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('City not found or invalid')),
@@ -422,22 +364,14 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     }
   }
 
-  // Cek kondisi & tampilkan notifikasi otomatis
   void _checkWeatherAndNotify() {
-    print('\n🔍 === CHECK WEATHER AND NOTIFY ===');
-    print('Current Value Empty: ${currentValue.isEmpty}');
-    print('Notifications Enabled: $_enableNotifications');
-    print('Allow Notification (Timer): $_allowNotification');
-    
     if (currentValue.isEmpty || !_enableNotifications || !_allowNotification) {
-      print('❌ Skipped: ${currentValue.isEmpty ? "No data" : !_enableNotifications ? "Notifications disabled" : "Timer not completed"}');
       return;
     }
 
     if (_lastNotificationTime != null) {
       final difference = DateTime.now().difference(_lastNotificationTime!);
       if (difference.inMinutes < 2) {
-        print('⏳ Cooldown active. Time since last: ${difference.inSeconds}s');
         return;
       }
     }
@@ -446,21 +380,16 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     String condition =
         (currentValue['condition']?['text'] ?? '').toString().toLowerCase();
 
-    print('🌡️ Temperature: $temp°C');
-    print('☁️ Condition: $condition');
-
     bool notificationSent = false;
 
     if (temp != null) {
       if (temp > 35) {
-        print('🔥 HOT WEATHER DETECTED');
         _showNotification(
           "Cuaca Panas 🔥",
           "Suhu di $city mencapai ${temp.toStringAsFixed(1)}°C, tetap terhidrasi ya!",
         );
         notificationSent = true;
       } else if (temp < 20) {
-        print('❄️ COLD WEATHER DETECTED');
         _showNotification(
           "Cuaca Dingin ❄️",
           "Suhu di $city cukup rendah (${temp.toStringAsFixed(1)}°C), jangan lupa jaket!",
@@ -473,7 +402,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
         (condition.contains("rain") ||
             condition.contains("storm") ||
             condition.contains("cloud"))) {
-      print('🌧️ SPECIAL WEATHER CONDITION DETECTED');
       _showNotification(
         "Perkiraan Cuaca 🌦️",
         "Saat ini di $city sedang ${currentValue['condition']?['text']}. Persiapkan payungmu!",
@@ -483,12 +411,7 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
 
     if (notificationSent) {
       _lastNotificationTime = DateTime.now();
-      print('✅ Notification sent and timestamp updated');
-    } else {
-      print('ℹ️ No notification conditions met (temp: $temp°C)');
     }
-    
-    print('=== END CHECK ===\n');
   }
 
   String formatTimeWithZone(DateTime time) {
@@ -505,6 +428,40 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
   String formateTime(String timeString) {
     DateTime time = DateTime.parse(timeString);
     return DateFormat.j().format(time);
+  }
+
+  // --- LOGIC PERKETAT AKSES (HANYA PREMIUM) ---
+  void _showUpgradeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey.shade900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('💎 Fitur Premium', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Weather AI eksklusif untuk pengguna Premium. Upgrade sekarang untuk membuka akses!',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Nanti', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const PlanProPage()),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+            child: const Text('Upgrade Premium', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -525,332 +482,321 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
       key: _scaffoldKey,
       backgroundColor: Colors.black,
       drawer: Drawer(
-  backgroundColor: Colors.black87,
-  child: ListView(
-    padding: EdgeInsets.zero,
-    children: [
-      // ===== DRAWER HEADER =====
-     Container(
-  padding: const EdgeInsets.fromLTRB(16, 40, 16, 8),
-  decoration: const BoxDecoration(
-    gradient: LinearGradient(
-      colors: [Color(0x73000000), Color.fromARGB(255, 255, 154, 22)],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    ),
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisSize: MainAxisSize.min, // biar tinggi pas isi aja
-    children: [
-      Text(
-        'Welcome, $username!',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'Ini aplikasi forecasting cuaca!',
-        style: TextStyle(color: Colors.white60, fontSize: 13),
-      ),
-      const SizedBox(height: 6),
-      Container(
-        height: 1,
-        color: Colors.white30, // garis pemisah halus
-      ),
-    ],
-  ),
-),
-
-      
-      // ===== WEATHER AI MENU - FIXED =====
-      Container(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color.fromARGB(255, 255, 178, 25), Color.fromARGB(255, 255, 137, 19)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x4D1565C0),
-              blurRadius: 8,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ListTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          title: const Text(
-            'Weather AI',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          subtitle: const Text(
-            'Tanya AI tentang cuaca',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-            ),
-          ),
-          trailing: const Icon(
-            Icons.arrow_forward_ios,
-            color: Colors.white70,
-            size: 16,
-          ),
-          onTap: () {
-            print('\n🤖 === WEATHER AI CLICKED ===');
-            print('Current Value: $currentValue');
-            print('City: $city');
-            print('Country: $country');
-            
-            // Validasi data cuaca
-            if (currentValue.isEmpty) {
-              print('❌ Weather data is empty!');
-              Navigator.pop(context); // Tutup drawer dulu
-              
-              // Delay untuk menunggu drawer tertutup
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('⚠️ Data cuaca belum tersedia. Cari kota terlebih dahulu!'),
-                      backgroundColor: Colors.orange,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              });
-              return;
-            }
-            
-            // Validasi data yang diperlukan
-            if (currentValue['temp_c'] == null || 
-                currentValue['condition'] == null) {
-              print('❌ Incomplete weather data!');
-              Navigator.pop(context); // Tutup drawer dulu
-              
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('⚠️ Data cuaca tidak lengkap. Coba refresh data!'),
-                      backgroundColor: Colors.orange,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              });
-              return;
-            }
-            
-            print('✅ Weather data validated. Preparing navigation...');
-            
-            // Buat weather data yang aman
-            final weatherDataForAI = {
-              'current': {
-                'temp_c': currentValue['temp_c'] ?? 0,
-                'condition': {
-                  'text': currentValue['condition']?['text'] ?? 'Unknown',
-                  'icon': currentValue['condition']?['icon'] ?? '',
-                },
-                'humidity': currentValue['humidity'] ?? 0,
-                'wind_kph': currentValue['wind_kph'] ?? 0,
-                'feelslike_c': currentValue['feelslike_c'] ?? 0,
-              },
-              'location': {
-                'name': city,
-                'country': country.isNotEmpty ? country : 'Unknown',
-              },
-            };
-            
-            print('📊 Weather data prepared: $weatherDataForAI');
-            
-            // KUNCI: Tutup drawer DULU
-            Navigator.pop(context);
-            
-            // LALU navigate dengan delay untuk memastikan drawer tertutup
-            Future.delayed(const Duration(milliseconds: 300), () {
-              if (mounted) {
-                try {
-                  print('🚀 Navigating to Weather AI page...');
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => WeatherAiPage(
-                        weatherData: weatherDataForAI,
-                        cityName: city,
-                      ),
-                    ),
-                  ).then((value) {
-                    print('🔙 Returned from AI page');
-                  }).catchError((error) {
-                    print('❌ Navigation error: $error');
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('❌ Error: $error'),
-                          backgroundColor: Colors.red,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  });
-                } catch (e) {
-                  print('❌ Exception during navigation: $e');
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('❌ Error membuka AI: $e'),
-                        backgroundColor: Colors.red,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                }
-              }
-            });
-            
-            print('=== END WEATHER AI CLICK ===\n');
-          },
-        ),
-      ),
-      
-      const SizedBox(height: 5),
-      
-      // ===== PROFILE MENU - FIXED =====
-      ListTile(
-        leading: const Icon(Icons.person, color: Colors.white70),
-        title: const Text(
-          'Profile',
-          style: TextStyle(color: Colors.white),
-        ),
-        onTap: () {
-          print('👤 Profile clicked');
-          
-          // Tutup drawer dulu
-          Navigator.pop(context);
-          
-          // Lalu navigate dengan delay
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) {
-              try {
-                print('🚀 Navigating to Profile page...');
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ProfilePage()),
-                );
-              } catch (e) {
-                print('❌ Profile navigation error: $e');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('❌ Error: $e'),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              }
-            }
-          });
-        },
-      ),
-      
-      // ===== UPGRADE PRO MENU - FIXED =====
-      ListTile(
-        leading: const Icon(Icons.money, color: Colors.white70),
-        title: const Text(
-          'Upgrade Pro',
-          style: TextStyle(color: Colors.white),
-        ),
-        onTap: () {
-          print('💎 Upgrade Pro clicked');
-          
-          // Tutup drawer dulu
-          Navigator.pop(context);
-          
-          // Lalu navigate dengan delay
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) {
-              try {
-                print('🚀 Navigating to PlanPro page...');
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const PlanProPage()),
-                );
-              } catch (e) {
-                print('❌ PlanPro navigation error: $e');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('❌ Error: $e'),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              }
-            }
-          });
-        },
-      ),
-      
-      const Divider(color: Colors.white30, thickness: 1),
-      
-      // ===== INFO FOOTER =====
-      const Padding(
-        padding: EdgeInsets.all(15),
-        child: Column(
+        backgroundColor: Colors.black87,
+        child: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.cloud, color: Colors.blue, size: 16),
-                SizedBox(width: 5),
-                Text(
-                  'Weather App v1.0',
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 40, 16, 8),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0x73000000), Color.fromARGB(255, 255, 154, 22)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Welcome, $username!',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        'Plan: ',
+                        style: const TextStyle(color: Colors.white60, fontSize: 13),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: userPlan == 'Premium' 
+                              ? Colors.purple
+                              : userPlan == 'Pro' 
+                                  ? Colors.orange 
+                                  : Colors.grey,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          userPlan,
+                          style: const TextStyle(
+                            color: Colors.white, 
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    height: 1,
+                    color: Colors.white30,
+                  ),
+                ],
+              ),
+            ),
+            
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color.fromARGB(255, 255, 178, 25), Color.fromARGB(255, 255, 137, 19)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x4D1565C0),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    userPlan == 'Premium' ? Icons.auto_awesome : Icons.lock, // HANYA PREMIUM YG BISA
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                title: const Text(
+                  'Weather AI',
                   style: TextStyle(
-                    color: Colors.white38,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Tanya AI tentang cuaca',
+                  style: TextStyle(
+                    color: Colors.white70,
                     fontSize: 12,
                   ),
                 ),
-              ],
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.white70,
+                  size: 16,
+                ),
+                onTap: () {
+                  // --- LOGIC DIUBAH: HANYA PREMIUM YANG LOLOS ---
+                  if (userPlan != 'Premium') {
+                    _showUpgradeDialog();
+                    return;
+                  }
+
+                  if (currentValue.isEmpty) {
+                    Navigator.pop(context);
+                    
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('⚠️ Data cuaca belum tersedia. Cari kota terlebih dahulu!'),
+                            backgroundColor: Colors.orange,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    });
+                    return;
+                  }
+                  
+                  if (currentValue['temp_c'] == null || 
+                      currentValue['condition'] == null) {
+                    Navigator.pop(context);
+                    
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('⚠️ Data cuaca tidak lengkap. Coba refresh data!'),
+                            backgroundColor: Colors.orange,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    });
+                    return;
+                  }
+                  
+                  final weatherDataForAI = {
+                    'current': {
+                      'temp_c': currentValue['temp_c'] ?? 0,
+                      'condition': {
+                        'text': currentValue['condition']?['text'] ?? 'Unknown',
+                        'icon': currentValue['condition']?['icon'] ?? '',
+                      },
+                      'humidity': currentValue['humidity'] ?? 0,
+                      'wind_kph': currentValue['wind_kph'] ?? 0,
+                      'feelslike_c': currentValue['feelslike_c'] ?? 0,
+                    },
+                    'location': {
+                      'name': city,
+                      'country': country.isNotEmpty ? country : 'Unknown',
+                    },
+                  };
+                  
+                  Navigator.pop(context);
+                  
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    if (mounted) {
+                      try {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => WeatherAiPage(
+                              weatherData: weatherDataForAI,
+                              cityName: city,
+                            ),
+                          ),
+                        ).then((value) {
+                        }).catchError((error) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('❌ Error: $error'),
+                                backgroundColor: Colors.red,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        });
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('❌ Error membuka AI: $e'),
+                              backgroundColor: Colors.red,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  });
+                },
+              ),
             ),
-            SizedBox(height: 5),
-            Text(
-              'Powered by Gemini AI',
-              style: TextStyle(
-                color: Colors.white24,
-                fontSize: 10,
+            
+            const SizedBox(height: 5),
+            
+            ListTile(
+              leading: const Icon(Icons.person, color: Colors.white70),
+              title: const Text(
+                'Profile',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  if (mounted) {
+                    try {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ProfilePage()),
+                      );
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Error: $e'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    }
+                  }
+                });
+              },
+            ),
+            
+            ListTile(
+              leading: const Icon(Icons.money, color: Colors.white70),
+              title: const Text(
+                'Upgrade Pro',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  if (mounted) {
+                    try {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PlanProPage()),
+                      );
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Error: $e'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    }
+                  }
+                });
+              },
+            ),
+            
+            const Divider(color: Colors.white30, thickness: 1),
+            
+            const Padding(
+              padding: EdgeInsets.all(15),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.cloud, color: Colors.blue, size: 16),
+                      SizedBox(width: 5),
+                      Text(
+                        'Weather App v1.0',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Powered by Gemini AI',
+                    style: TextStyle(
+                      color: Colors.white24,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-    ],
-  ),
-),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: Colors.black45,
         titleSpacing: 0,
         title: Row(
@@ -893,7 +839,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            // ========== TOMBOL GEOLOKASI BARU ==========
             IconButton(
               onPressed: isLoadingLocation ? null : _getCurrentLocation,
               icon: isLoadingLocation
@@ -909,7 +854,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
               color: Colors.white,
               tooltip: 'Gunakan Lokasi Saat Ini',
             ),
-            // ========== END TOMBOL GEOLOKASI ==========
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
