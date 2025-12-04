@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:finalproject/pages/profile.dart';
 import 'package:finalproject/service/apiService.dart';
@@ -11,7 +12,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:finalproject/pages/weatherAiScreen.dart';
-import 'package:finalproject/service/dbHelper.dart'; 
+import 'package:finalproject/service/dbHelper.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 
 class WeaterScreen extends ConsumerStatefulWidget {
   const WeaterScreen({super.key});
@@ -48,6 +50,10 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
   bool _allowNotification = false;
   static const int _notificationDelaySeconds = 5;
 
+  // --- VARIABEL KOMPAS ---
+  double? _heading = 0;
+  StreamSubscription<CompassEvent>? _compassSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -56,8 +62,18 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     _initializeNotifications();
     _fetchWeather();
     _loadUserData();
-    
     _startNotificationDelayTimer();
+    _initCompass();
+  }
+
+  void _initCompass() {
+    _compassSubscription = FlutterCompass.events?.listen((event) {
+      if (mounted) {
+        setState(() {
+          _heading = event.heading;
+        });
+      }
+    });
   }
 
   @override
@@ -66,6 +82,7 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
       _timer.cancel();
     }
     _notificationDelayTimer?.cancel();
+    _compassSubscription?.cancel();
     super.dispose();
   }
 
@@ -430,7 +447,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
     return DateFormat.j().format(time);
   }
 
-  // --- LOGIC PERKETAT AKSES (HANYA PREMIUM) ---
   void _showUpgradeDialog() {
     showDialog(
       context: context,
@@ -569,7 +585,7 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    userPlan == 'Premium' ? Icons.auto_awesome : Icons.lock, // HANYA PREMIUM YG BISA
+                    userPlan == 'Premium' ? Icons.auto_awesome : Icons.lock,
                     color: Colors.white,
                     size: 24,
                   ),
@@ -595,7 +611,6 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
                   size: 16,
                 ),
                 onTap: () {
-                  // --- LOGIC DIUBAH: HANYA PREMIUM YANG LOLOS ---
                   if (userPlan != 'Premium') {
                     _showUpgradeDialog();
                     return;
@@ -759,6 +774,74 @@ class _WeaterScreenState extends ConsumerState<WeaterScreen> {
                   }
                 });
               },
+            ),
+
+            // ===== WIDGET KOMPAS (REAL) =====
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.explore, color: Colors.orangeAccent, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        "Compass",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Center(
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.orange, width: 2),
+                        gradient: const RadialGradient(
+                          colors: [Colors.black54, Colors.black87],
+                        ),
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Transform.rotate(
+                            angle: ((_heading ?? 0) * (math.pi / 180) * -1),
+                            child: const Icon(Icons.arrow_upward_rounded, color: Colors.redAccent, size: 40),
+                          ),
+                          const Positioned(top: 5, child: Text('N', style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold))),
+                          const Positioned(bottom: 5, child: Text('S', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                          const Positioned(right: 5, child: Text('E', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                          const Positioned(left: 5, child: Text('W', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Center(
+                    child: Text(
+                      _heading == null 
+                          ? "Calibrating..." 
+                          : "${_heading!.toStringAsFixed(0)}° ${_heading! < 0 ? 'W' : 'E'}",
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             
             const Divider(color: Colors.white30, thickness: 1),

@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:finalproject/service/apiService.dart';
-import 'package:finalproject/service/dbHelper.dart'; // Import DB Helper
-import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
+import 'package:finalproject/service/dbHelper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:finalproject/pages/weatherScreen.dart'; // Pastikan import ini ada
 
 class ProPlanController {
   // State variables
   int selectedPlanIndex = 1; // Default: Pro Plan
   String selectedCurrency = 'USD';
-
+  
   // Services
   final CurrencyService currencyService = CurrencyService();
-  final DatabaseHelper dbHelper = DatabaseHelper(); // Instance DB Helper
-
-  // Context untuk SnackBar
+  final DatabaseHelper dbHelper = DatabaseHelper();
+  
+  // Context untuk SnackBar & Navigasi
   BuildContext? context;
-
+  
   // Callback untuk update UI
   Function()? onStateChanged;
 
@@ -108,28 +109,19 @@ class ProPlanController {
 
   // ========== CURRENCY CONVERSION ==========
 
-  Future<String> getConvertedPrice(
-    double usdPrice,
-    String targetCurrency,
-  ) async {
+  Future<String> getConvertedPrice(double usdPrice, String targetCurrency) async {
     if (targetCurrency == 'USD') {
       return '\$${usdPrice.toStringAsFixed(2)}';
     }
 
     try {
-      final result = await currencyService.convertCurrency(
-        'USD',
-        targetCurrency,
-        usdPrice,
-      );
-      print('🔍 API Response: $result');
-
-      final convertedAmount =
-          result['converted_amount'] ??
-          result['result'] ??
-          result['amount'] ??
-          usdPrice;
-
+      final result = await currencyService.convertCurrency('USD', targetCurrency, usdPrice);
+      
+      final convertedAmount = result['converted_amount'] ?? 
+                             result['result'] ?? 
+                             result['amount'] ?? 
+                             usdPrice;
+      
       double finalAmount;
       if (convertedAmount is int) {
         finalAmount = convertedAmount.toDouble();
@@ -140,7 +132,7 @@ class ProPlanController {
       } else {
         finalAmount = usdPrice;
       }
-
+      
       final symbol = getCurrencySymbol(targetCurrency);
       if (targetCurrency == 'IDR' || targetCurrency == 'JPY') {
         String formatted = finalAmount.toStringAsFixed(0);
@@ -158,19 +150,19 @@ class ProPlanController {
     final parts = number.split('.');
     final integerPart = parts[0];
     final buffer = StringBuffer();
-
+    
     for (int i = 0; i < integerPart.length; i++) {
       if (i > 0 && (integerPart.length - i) % 3 == 0) {
         buffer.write(',');
       }
       buffer.write(integerPart[i]);
     }
-
+    
     if (parts.length > 1) {
       buffer.write('.');
       buffer.write(parts[1]);
     }
-
+    
     return buffer.toString();
   }
 
@@ -181,17 +173,8 @@ class ProPlanController {
     )['symbol']!;
   }
 
-  // ========== SUBSCRIPTION ACTIONS ==========
+  // ========== SUBSCRIPTION ACTIONS (PERBAIKAN UTAMA DISINI) ==========
 
-  void handleSubscription() {
-    if (selectedPlanIndex == 0) {
-      // Free plan logic if needed
-    } else {
-      // Pro/Premium logic handled by dialog
-    }
-  }
-
-  // LOGIC UPDATE PLAN DI SINI
   Future<void> confirmSubscription(String convertedPrice) async {
     if (context == null || !context!.mounted) return;
 
@@ -199,34 +182,52 @@ class ProPlanController {
     final planName = plan['name'] as String;
 
     try {
-      // 1. Ambil username yang sedang login
+      // 1. Ambil username user yang sedang login
       final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('username');
 
       if (username != null) {
-        // 2. Update status plan di database
+        // 2. Update database
         await dbHelper.updateUserPlan(username, planName);
-
-        // 3. Tampilkan sukses
-        ScaffoldMessenger.of(context!).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Berlangganan $planName berhasil!\nAkses fitur premium telah dibuka.',
+        
+        if (context!.mounted) {
+          // 3. Tampilkan pesan sukses
+          ScaffoldMessenger.of(context!).showSnackBar(
+            SnackBar(
+              content: Text(
+                '🎉 Berhasil upgrade ke $planName!\nMengalihkan ke halaman utama...',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
             ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+          );
+
+          // 4. AUTO NAVIGATE BACK TO HOME
+          // Delay sedikit agar user sempat baca snackbar
+          Future.delayed(const Duration(seconds: 2), () {
+            if (context!.mounted) {
+              // Menggunakan pushAndRemoveUntil agar tumpukan halaman bersih
+              // dan halaman WeaterScreen di-rebuild ulang (sehingga _loadUserData jalan lagi)
+              Navigator.pushAndRemoveUntil(
+                context!,
+                MaterialPageRoute(builder: (context) => const WeaterScreen()),
+                (route) => false, 
+              );
+            }
+          });
+        }
       } else {
         throw Exception("User session not found");
       }
     } catch (e) {
-      ScaffoldMessenger.of(context!).showSnackBar(
-        SnackBar(
-          content: Text('Gagal mengupdate plan: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (context!.mounted) {
+        ScaffoldMessenger.of(context!).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mengupdate plan: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -237,8 +238,8 @@ class ProPlanController {
   Color getSelectedPlanColor() => selectedPlan['color'] as Color;
 
   String getSubscribeButtonText() {
-    return selectedPlanIndex == 0
-        ? 'Gunakan Gratis'
+    return selectedPlanIndex == 0 
+        ? 'Gunakan Gratis' 
         : 'Berlangganan ${selectedPlan['name']}';
   }
 }
